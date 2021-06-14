@@ -47,6 +47,17 @@ unsigned int pressure_data;
 float PR;
 String PR_data;
 
+// button stuff
+int bounceTime = 50;
+int holdTime = 2000;
+
+int lastReading = LOW;
+bool hold = false;
+bool remove_old_data = false;
+
+long onTime = 0;
+//long lastSwitchTime = 0;
+
 void setup() {
   Serial.begin(9600);
 
@@ -66,6 +77,9 @@ void setup() {
   // Clear the buffer.
   display.clearDisplay();
   display.display();
+
+  // Initialize buttons on feather wing
+  pinMode(BUTTON_A, INPUT_PULLUP);
 
   // text display tests
   display.setTextSize(1);
@@ -104,7 +118,6 @@ void setup() {
   }
   file.close();
 
-
   // Sensor initializing
   Wire.begin();
   pinMode(4, OUTPUT);
@@ -112,41 +125,83 @@ void setup() {
   digitalWrite(5, HIGH);  // SCL remains high
   digitalWrite(4, HIGH); // SDA transfers from high to low
   digitalWrite(4, LOW);  // this turns on the MS4525, I think
-  delay(5000);
-  Serial.println(">>>>>>>>>>>>>>>>>>>>>>>>");  // just to be sure things are working 
+  delay(3000);
+  Serial.println(">>>>>>>>>>>>>>>>>>>>>>>>");  // just to be sure things are working
+
+  display.setCursor(0,0);
+  display.print("To remove the old data press and hold top button for two seconds.");
+  display.display();
+  delay(2000);
+  display.clearDisplay();
 }
 
 void loop() {
+  int reading = !digitalRead(BUTTON_A);
+  Serial.print("reading:  ");
+  Serial.println(reading);
 
+  //first pressed
+  if (reading == HIGH && lastReading == LOW) {
+    onTime = millis();
+  }
+
+  //held
+  if (reading == HIGH && lastReading == HIGH) {
+    if ((millis() - onTime) > holdTime) {
+      hold = true;
+    }
+  }
+
+  //released
+  if (reading == LOW && lastReading == HIGH) {
+    if (((millis() - onTime) > bounceTime) && hold != 1) {
+      onRelease();
+    }
+    if (hold) {
+      hold = false;
+      remove_old_data = true;
+    }   
+  }
+  lastReading = reading;
+
+  // read pressure sensor
   pressure_sensor_status = fetch_pressure(&pressure_data);
   
-  switch(pressure_sensor_status)
-  {
-    case 0: Serial.println("Read_MR.");
-    break;
-    case 1: Serial.println("Read_DF2.");
-    break;
-    case 2: Serial.println("Read_DF3.");
-    break;
-    default: Serial.println("Read_DF4.");
-    break;
-  }
+//  switch(pressure_sensor_status)
+//  {
+//    case 0: Serial.println("Read_MR.");
+//    break;
+//    case 1: Serial.println("Read_DF2.");
+//    break;
+//    case 2: Serial.println("Read_DF3.");
+//    break;
+//    default: Serial.println("Read_DF4.");
+//    break;
+//  }
  
   PR = (float)  ((pressure_data - (.1*16383))*(1) / (.8*16383)) ;
  
-  Serial.println(pressure_data);
-  Serial.println(PR);
-  Serial.print(" ");
+//  Serial.println(pressure_data);
+//  Serial.println(PR);
+//  Serial.print(" ");
   PR_data = String(pressure_data);
-  appendFile(SD, "/data.txt", PR_data.c_str());
-
-  display.setCursor(0,0);
+  if (remove_old_data) {
+    display.println("Old data removed!");
+    display.display();
+    writeFile(SD, "/data.txt", PR_data.c_str());
+    delay(1000);
+    remove_old_data = false;
+  } else {
+    appendFile(SD, "/data.txt", PR_data.c_str());
+  }
+  
   display.println(pressure_data);
   display.println(PR);
+  display.setCursor(0,0);
   yield();
   display.display();
 
-  delay(1000);
+  delay(100);
 //  delay(100);
   display.clearDisplay(); 
 }
@@ -206,4 +261,23 @@ byte fetch_pressure(unsigned int *p_P_dat)
       P_dat = (((unsigned int)Press_H) << 8) | Press_L;
       *p_P_dat = P_dat;
       return(_status);
+}
+
+
+void onRelease() {
+// Do nothing for now
+  
+//  if ((millis() - lastSwitchTime) >= doubleTime) {
+//    single = 1;
+//    lastSwitchTime = millis();
+//    return;
+//  }  
+//
+//  if ((millis() - lastSwitchTime) < doubleTime) {
+//    toggleLED();
+//    Serial.println("double press");
+//    single = 0;
+//    lastSwitchTime = millis();
+//  }  
+
 }
